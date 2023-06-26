@@ -3,7 +3,7 @@ import axios from 'axios'
 import * as ws from 'ws'
 // import randomstring from "randomstring"
 import * as randomstring from "randomstring"
-import { Candle, ConnectionOptions, GetCandlesParams, MAX_BATCH_SIZE, MessagePayload, RawCandle, Subscriber, TradingviewConnection, Unsubscriber } from './types'
+import { Candle, ConnectionOptions, GetCandlesParams,GetCandlesParamsNew, MAX_BATCH_SIZE, MessagePayload, RawCandle, Subscriber, TradingviewConnection, Unsubscriber } from './types'
 
 // const WebSocket=ws.WebSocket
 
@@ -101,6 +101,9 @@ export async function connect(options: ConnectionOptions = {},): Promise<Trading
   })
 }
 
+
+
+
 export async function getCandlesV2({ connection, symbols, amount = 1000, timeframe = '1D' }: GetCandlesParams) {
   if (symbols.length === 0) return [] // at most make 10 requests every second, but evenly spaced.
   const d = symbols.map(symbol => new Promise((resolve, reject) => {
@@ -115,6 +118,7 @@ export async function getCandlesV2({ connection, symbols, amount = 1000, timefra
     connection.send('create_series', [
       chartSession, 'sds_1', 's0', 'sds_sym_0', timeframe.toString(), batchSize, ''
     ])
+ 
     connection.subscribe(({ name, params }) => {
       if (name === "timescale_update") {
         resolve(params[1]?.sds_1?.s)
@@ -127,18 +131,22 @@ export async function getCandlesV2({ connection, symbols, amount = 1000, timefra
   return await Promise.all(d)
 }
 
-export async function getCandles({ connection, symbols, amount, timeframe = 60 }: GetCandlesParams) {
-  if (symbols.length === 0) return []
-
+export async function getCandles({ connection,timeframe = 60,symbolswithDetail=[{ticker:`IDX:TLKM`,barcount:2}] }: GetCandlesParamsNew) {
+  if (symbolswithDetail.length === 0) return []
   const chartSession = "cs_" + randomstring.generate(12)
-  const batchSize = amount && amount < MAX_BATCH_SIZE ? amount : MAX_BATCH_SIZE
+  // const batchSize = amount && amount < MAX_BATCH_SIZE ? amount : MAX_BATCH_SIZE
 
   return new Promise<Candle[][]>(resolve => {
     const allCandles: Candle[][] = []
     let currentSymCandles: RawCandle[] = []
     let currentSymIndex = 0
-    let symbol = symbols[currentSymIndex]
+    let symbol = symbolswithDetail[currentSymIndex].ticker
+    let amount=symbolswithDetail[currentSymIndex].barcount
+    let batchSize = amount && amount < MAX_BATCH_SIZE ? amount : MAX_BATCH_SIZE
+    
+  
     connection.send('chart_create_session', [chartSession, ''])
+
     connection.send('resolve_symbol', [
       chartSession,
       `sds_sym_0`,
@@ -154,7 +162,6 @@ export async function getCandles({ connection, symbols, amount, timeframe = 60 }
       if (event.name === 'timescale_update') {
         let newCandles: RawCandle[] = event.params[1]['sds_1']['s']
         if (newCandles.length > batchSize) {
-          // sometimes tradingview sends already received candles
           newCandles = newCandles.slice(0, -currentSymCandles.length)
         }
         currentSymCandles = newCandles.concat(currentSymCandles)
@@ -164,13 +171,15 @@ export async function getCandles({ connection, symbols, amount, timeframe = 60 }
       // loaded all requested candles
       if (['series_completed', 'symbol_error'].includes(event.name)) {
         const loadedCount = currentSymCandles.length
-        if (loadedCount > 0 && loadedCount % batchSize === 0 && (!amount || loadedCount < amount)) {
+        // if (loadedCount > 0 && loadedCount % batchSize === 0 && (!amount || loadedCount < amount)) {
+        //   connection.send('request_more_data', [chartSession, 'sds_1', batchSize])
+        //   return
+        // }
+        if (loadedCount > 0 &&  (!amount || loadedCount < amount)) {
           connection.send('request_more_data', [chartSession, 'sds_1', batchSize])
           return
         }
-
         // loaded all candles for current symbol
-
         if (amount) currentSymCandles = currentSymCandles.slice(0, amount)
 
         const candles = currentSymCandles.map(c => ({
@@ -184,10 +193,13 @@ export async function getCandles({ connection, symbols, amount, timeframe = 60 }
         allCandles.push(candles)
 
         // next symbol
-        if (symbols.length - 1 > currentSymIndex) {
+        if (symbolswithDetail.length - 1 > currentSymIndex) {
           currentSymCandles = []
           currentSymIndex += 1
-          symbol = symbols[currentSymIndex]
+          symbol = symbolswithDetail[currentSymIndex].ticker
+          amount=symbolswithDetail[currentSymIndex].barcount
+          batchSize = amount && amount < MAX_BATCH_SIZE ? amount : MAX_BATCH_SIZE
+
           connection.send('resolve_symbol', [
             chartSession,
             `sds_sym_${currentSymIndex}`,
@@ -202,6 +214,7 @@ export async function getCandles({ connection, symbols, amount, timeframe = 60 }
             timeframe.toString(),
             ''
           ])
+
           return
         }
 

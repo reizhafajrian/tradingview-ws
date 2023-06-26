@@ -188,19 +188,21 @@ function getCandlesV2(_a) {
 }
 exports.getCandlesV2 = getCandlesV2;
 function getCandles(_a) {
-    var connection = _a.connection, symbols = _a.symbols, amount = _a.amount, _b = _a.timeframe, timeframe = _b === void 0 ? 60 : _b;
+    var connection = _a.connection, _b = _a.timeframe, timeframe = _b === void 0 ? 60 : _b, _c = _a.symbolswithDetail, symbolswithDetail = _c === void 0 ? [{ ticker: "IDX:TLKM", barcount: 2 }] : _c;
     return __awaiter(this, void 0, void 0, function () {
-        var chartSession, batchSize;
-        return __generator(this, function (_c) {
-            if (symbols.length === 0)
+        var chartSession;
+        return __generator(this, function (_d) {
+            if (symbolswithDetail.length === 0)
                 return [2 /*return*/, []];
             chartSession = "cs_" + randomstring.generate(12);
-            batchSize = amount && amount < types_1.MAX_BATCH_SIZE ? amount : types_1.MAX_BATCH_SIZE;
+            // const batchSize = amount && amount < MAX_BATCH_SIZE ? amount : MAX_BATCH_SIZE
             return [2 /*return*/, new Promise(function (resolve) {
                     var allCandles = [];
                     var currentSymCandles = [];
                     var currentSymIndex = 0;
-                    var symbol = symbols[currentSymIndex];
+                    var symbol = symbolswithDetail[currentSymIndex].ticker;
+                    var amount = symbolswithDetail[currentSymIndex].barcount;
+                    var batchSize = amount && amount < types_1.MAX_BATCH_SIZE ? amount : types_1.MAX_BATCH_SIZE;
                     connection.send('chart_create_session', [chartSession, '']);
                     connection.send('resolve_symbol', [
                         chartSession,
@@ -215,7 +217,6 @@ function getCandles(_a) {
                         if (event.name === 'timescale_update') {
                             var newCandles = event.params[1]['sds_1']['s'];
                             if (newCandles.length > batchSize) {
-                                // sometimes tradingview sends already received candles
                                 newCandles = newCandles.slice(0, -currentSymCandles.length);
                             }
                             currentSymCandles = newCandles.concat(currentSymCandles);
@@ -224,7 +225,11 @@ function getCandles(_a) {
                         // loaded all requested candles
                         if (['series_completed', 'symbol_error'].includes(event.name)) {
                             var loadedCount = currentSymCandles.length;
-                            if (loadedCount > 0 && loadedCount % batchSize === 0 && (!amount || loadedCount < amount)) {
+                            // if (loadedCount > 0 && loadedCount % batchSize === 0 && (!amount || loadedCount < amount)) {
+                            //   connection.send('request_more_data', [chartSession, 'sds_1', batchSize])
+                            //   return
+                            // }
+                            if (loadedCount > 0 && (!amount || loadedCount < amount)) {
                                 connection.send('request_more_data', [chartSession, 'sds_1', batchSize]);
                                 return;
                             }
@@ -241,10 +246,12 @@ function getCandles(_a) {
                             }); });
                             allCandles.push(candles);
                             // next symbol
-                            if (symbols.length - 1 > currentSymIndex) {
+                            if (symbolswithDetail.length - 1 > currentSymIndex) {
                                 currentSymCandles = [];
                                 currentSymIndex += 1;
-                                symbol = symbols[currentSymIndex];
+                                symbol = symbolswithDetail[currentSymIndex].ticker;
+                                amount = symbolswithDetail[currentSymIndex].barcount;
+                                batchSize = amount && amount < types_1.MAX_BATCH_SIZE ? amount : types_1.MAX_BATCH_SIZE;
                                 connection.send('resolve_symbol', [
                                     chartSession,
                                     "sds_sym_".concat(currentSymIndex),
