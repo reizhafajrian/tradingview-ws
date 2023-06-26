@@ -15,7 +15,6 @@ import { connect, getCandles,getCandleswithbarcount } from './src/index'
       symbols:[`NSE:NIFTY`,`NSE:SBIN`],
       amount:4,
       timeframe: "1D",
-      symbolswithDetail:[{ticker:`NSE:NIFTY`,barcount:2},{ticker:`NSE:SBIN`,barcount:3},{ticker:`NSE:TCS1`,barcount:4}]
     })
     console.log(candles.map(data=>console.log(data)))
     const end = new Date().getTime();
