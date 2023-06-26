@@ -1,7 +1,11 @@
 import axios from 'axios'
-import WebSocket, { EventEmitter } from 'ws'
-import randomstring from "randomstring"
+// import WebSocket, { EventEmitter } from 'ws'
+import * as ws from 'ws'
+// import randomstring from "randomstring"
+import * as randomstring from "randomstring"
 import { Candle, ConnectionOptions, GetCandlesParams, MAX_BATCH_SIZE, MessagePayload, RawCandle, Subscriber, TradingviewConnection, Unsubscriber } from './types'
+
+// const WebSocket=ws.WebSocket
 
 export const EVENT_NAMES = {
   TIMESCALE_UPDATE: 'timescale_update',
@@ -42,7 +46,7 @@ export async function connect(options: ConnectionOptions = {},): Promise<Trading
     token = resp.data.match(/"auth_token":"(.+?)"/)[1]
   }
 
-  const connection = new WebSocket("wss://prodata.tradingview.com/socket.io/websocket", {
+  const connection = new ws.WebSocket("wss://prodata.tradingview.com/socket.io/websocket", {
     origin: "https://prodata.tradingview.com"
   }).setMaxListeners(400)
 
