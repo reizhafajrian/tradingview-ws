@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 exports.__esModule = true;
-exports.connectAndSubscribe = exports.getCandles = exports.getCandlesV2 = exports.connect = exports.EVENT_NAMES = void 0;
+exports.connectAndSubscribe = exports.getCandles = exports.getCandleswithbarcount = exports.getCandlesV2 = exports.connect = exports.EVENT_NAMES = void 0;
 var axios_1 = require("axios");
 // import WebSocket, { EventEmitter } from 'ws'
 var ws = require("ws");
@@ -187,8 +187,8 @@ function getCandlesV2(_a) {
     });
 }
 exports.getCandlesV2 = getCandlesV2;
-function getCandles(_a) {
-    var connection = _a.connection, _b = _a.timeframe, timeframe = _b === void 0 ? 60 : _b, _c = _a.symbolswithDetail, symbolswithDetail = _c === void 0 ? [{ ticker: "IDX:TLKM", barcount: 2 }] : _c;
+function getCandleswithbarcount(_a) {
+    var connection = _a.connection, _b = _a.timeframe, timeframe = _b === void 0 ? 60 : _b, _c = _a.symbolswithDetail, symbolswithDetail = _c === void 0 ? [{ ticker: "NSE:NIFTY", barcount: 2 }] : _c;
     return __awaiter(this, void 0, void 0, function () {
         var chartSession;
         return __generator(this, function (_d) {
@@ -272,6 +272,89 @@ function getCandles(_a) {
                             resolve(allCandles);
                         }
                     });
+                })];
+        });
+    });
+}
+exports.getCandleswithbarcount = getCandleswithbarcount;
+function getCandles(_a) {
+    var connection = _a.connection, symbols = _a.symbols, amount = _a.amount, _b = _a.timeframe, timeframe = _b === void 0 ? 60 : _b;
+    return __awaiter(this, void 0, void 0, function () {
+        var chartSession, batchSize;
+        return __generator(this, function (_c) {
+            if (symbols.length === 0)
+                return [2 /*return*/, []];
+            chartSession = "cs_" + randomstring.generate(12);
+            batchSize = amount && amount < types_1.MAX_BATCH_SIZE ? amount : types_1.MAX_BATCH_SIZE;
+            return [2 /*return*/, new Promise(function (resolve) {
+                    var allCandles = [];
+                    var currentSymIndex = 0;
+                    var symbol = symbols[currentSymIndex];
+                    var currentSymCandles = [];
+                    var unsubscribe = connection.subscribe(function (event) {
+                        // received new candles
+                        if (event.name === 'timescale_update') {
+                            var newCandles = event.params[1]['sds_1']['s'];
+                            if (newCandles.length > batchSize) {
+                                // sometimes tradingview sends already received candles
+                                newCandles = newCandles.slice(0, -currentSymCandles.length);
+                            }
+                            currentSymCandles = newCandles.concat(currentSymCandles);
+                            return;
+                        }
+                        // loaded all requested candles
+                        if (['series_completed', 'symbol_error'].includes(event.name)) {
+                            var loadedCount = currentSymCandles.length;
+                            if (loadedCount > 0 && loadedCount % batchSize === 0 && (!amount || loadedCount < amount)) {
+                                connection.send('request_more_data', [chartSession, 'sds_1', batchSize]);
+                                return;
+                            }
+                            // loaded all candles for current symbol
+                            if (amount)
+                                currentSymCandles = currentSymCandles.slice(0, amount);
+                            var candles = currentSymCandles.map(function (c) { return ({
+                                timestamp: c.v[0],
+                                open: c.v[1],
+                                high: c.v[2],
+                                low: c.v[3],
+                                close: c.v[4],
+                                volume: c.v[5]
+                            }); });
+                            allCandles.push(candles);
+                            // next symbol
+                            if (symbols.length - 1 > currentSymIndex) {
+                                currentSymCandles = [];
+                                currentSymIndex += 1;
+                                symbol = symbols[currentSymIndex];
+                                connection.send('resolve_symbol', [
+                                    chartSession,
+                                    "sds_sym_".concat(currentSymIndex),
+                                    '=' + JSON.stringify({ symbol: symbol, adjustment: 'splits' })
+                                ]);
+                                connection.send('modify_series', [
+                                    chartSession,
+                                    'sds_1',
+                                    "s".concat(currentSymIndex),
+                                    "sds_sym_".concat(currentSymIndex),
+                                    timeframe.toString(),
+                                    ''
+                                ]);
+                                return;
+                            }
+                            // all symbols loaded
+                            unsubscribe();
+                            resolve(allCandles);
+                        }
+                    });
+                    connection.send('chart_create_session', [chartSession, '']);
+                    connection.send('resolve_symbol', [
+                        chartSession,
+                        "sds_sym_0",
+                        '=' + JSON.stringify({ symbol: symbol, adjustment: 'splits' })
+                    ]);
+                    connection.send('create_series', [
+                        chartSession, 'sds_1', 's0', 'sds_sym_0', timeframe.toString(), batchSize, ''
+                    ]);
                 })];
         });
     });

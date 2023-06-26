@@ -131,7 +131,8 @@ export async function getCandlesV2({ connection, symbols, amount = 1000, timefra
   return await Promise.all(d)
 }
 
-export async function getCandles({ connection,timeframe = 60,symbolswithDetail=[{ticker:`IDX:TLKM`,barcount:2}] }: GetCandlesParamsNew) {
+
+export async function getCandleswithbarcount({ connection,timeframe = 60,symbolswithDetail=[{ticker:`NSE:NIFTY`,barcount:2}] }: GetCandlesParamsNew) {
   if (symbolswithDetail.length === 0) return []
   const chartSession = "cs_" + randomstring.generate(12)
   // const batchSize = amount && amount < MAX_BATCH_SIZE ? amount : MAX_BATCH_SIZE
@@ -223,6 +224,92 @@ export async function getCandles({ connection,timeframe = 60,symbolswithDetail=[
         resolve(allCandles)
       }
     })
+  })
+}
+
+export async function getCandles({ connection, symbols, amount, timeframe = 60 }: GetCandlesParams) {
+  if (symbols.length === 0) return []
+
+  const chartSession = "cs_" + randomstring.generate(12)
+  const batchSize = amount && amount < MAX_BATCH_SIZE ? amount : MAX_BATCH_SIZE
+
+  return new Promise<Candle[][]>(resolve => {
+    const allCandles: Candle[][] = []
+    let currentSymIndex = 0
+    let symbol = symbols[currentSymIndex]
+    let currentSymCandles: RawCandle[] = []
+
+    const unsubscribe = connection.subscribe(event => {
+      // received new candles
+      if (event.name === 'timescale_update') {
+        let newCandles: RawCandle[] = event.params[1]['sds_1']['s']
+        if (newCandles.length > batchSize) {
+          // sometimes tradingview sends already received candles
+          newCandles = newCandles.slice(0, -currentSymCandles.length)
+        }
+        currentSymCandles = newCandles.concat(currentSymCandles)
+        return
+      }
+
+      // loaded all requested candles
+      if (['series_completed', 'symbol_error'].includes(event.name)) {
+        const loadedCount = currentSymCandles.length
+        if (loadedCount > 0 && loadedCount % batchSize === 0 && (!amount || loadedCount < amount)) {
+          connection.send('request_more_data', [chartSession, 'sds_1', batchSize])
+          return
+        }
+
+        // loaded all candles for current symbol
+
+        if (amount) currentSymCandles = currentSymCandles.slice(0, amount)
+
+        const candles = currentSymCandles.map(c => ({
+          timestamp: c.v[0],
+          open: c.v[1],
+          high: c.v[2],
+          low: c.v[3],
+          close: c.v[4],
+          volume: c.v[5]
+        }))
+        allCandles.push(candles)
+
+        // next symbol
+        if (symbols.length - 1 > currentSymIndex) {
+          currentSymCandles = []
+          currentSymIndex += 1
+          symbol = symbols[currentSymIndex]
+          connection.send('resolve_symbol', [
+            chartSession,
+            `sds_sym_${currentSymIndex}`,
+            '=' + JSON.stringify({ symbol, adjustment: 'splits' })
+          ])
+
+          connection.send('modify_series', [
+            chartSession,
+            'sds_1',
+            `s${currentSymIndex}`,
+            `sds_sym_${currentSymIndex}`,
+            timeframe.toString(),
+            ''
+          ])
+          return
+        }
+
+        // all symbols loaded
+        unsubscribe()
+        resolve(allCandles)
+      }
+    })
+
+    connection.send('chart_create_session', [chartSession, ''])
+    connection.send('resolve_symbol', [
+      chartSession,
+      `sds_sym_0`,
+      '=' + JSON.stringify({ symbol, adjustment: 'splits' })
+    ])
+    connection.send('create_series', [
+      chartSession, 'sds_1', 's0', 'sds_sym_0', timeframe.toString(), batchSize, ''
+    ])
   })
 }
 

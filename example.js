@@ -50,6 +50,8 @@ var index_1 = require("./src/index");
                     connection = _a.sent();
                     return [4 /*yield*/, (0, index_1.getCandles)({
                             connection: connection,
+                            symbols: ["NSE:NIFTY", "NSE:SBIN"],
+                            amount: 4,
                             timeframe: "1D",
                             symbolswithDetail: [{ ticker: "NSE:NIFTY", barcount: 2 }, { ticker: "NSE:SBIN", barcount: 3 }, { ticker: "NSE:TCS1", barcount: 4 }]
                         })];
@@ -64,6 +66,39 @@ var index_1 = require("./src/index");
                 case 3:
                     error_1 = _a.sent();
                     console.error(error_1);
+                    return [3 /*break*/, 4];
+                case 4: return [2 /*return*/];
+            }
+        });
+    });
+}());
+(function () {
+    return __awaiter(this, void 0, void 0, function () {
+        var start, connection, candles, end, time, error_2;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    _a.trys.push([0, 3, , 4]);
+                    start = new Date().getTime();
+                    return [4 /*yield*/, (0, index_1.connect)()];
+                case 1:
+                    connection = _a.sent();
+                    return [4 /*yield*/, (0, index_1.getCandleswithbarcount)({
+                            connection: connection,
+                            timeframe: "1D",
+                            symbolswithDetail: [{ ticker: "NSE:NIFTY", barcount: 2 }, { ticker: "NSE:SBIN", barcount: 3 }, { ticker: "NSE:TCS1", barcount: 4 }]
+                        })];
+                case 2:
+                    candles = _a.sent();
+                    console.log(candles.map(function (data) { return console.log(data); }));
+                    end = new Date().getTime();
+                    time = end - start;
+                    console.log('Execution time: ' + time);
+                    connection.close();
+                    return [3 /*break*/, 4];
+                case 3:
+                    error_2 = _a.sent();
+                    console.error(error_2);
                     return [3 /*break*/, 4];
                 case 4: return [2 /*return*/];
             }
